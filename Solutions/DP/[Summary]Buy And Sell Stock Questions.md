@@ -1,3 +1,4 @@
+# 有关于股票售卖的问题总集
 [121. Best Time to Buy and Sell Stock](https://leetcode-cn.com/problems/best-time-to-buy-and-sell-stock/)
 
 首先看题1 <= prices.length <= 10^5，暴力是O(n^2)，基本就奔着超时去了
@@ -24,3 +25,4 @@ public int maxProfit(int[] prices) {
     return ans;
 }
 ```
+另外看了官方解答，单调栈应该也可以实现，有兴趣可以试一下
