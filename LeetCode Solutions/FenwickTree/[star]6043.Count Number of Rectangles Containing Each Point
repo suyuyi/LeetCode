@@ -1,0 +1,124 @@
+[6043.Count Number of Rectangles Containing Each Point](https://leetcode-cn.com/problems/count-number-of-rectangles-containing-each-point/)
+令人耳目一新的树状数组应用，在原先的认知中我认为树状数组只是用于单点变更和范围求和的，但本题完全改变了这一幼稚的观点
+感谢[@tsreaper](/u/tsreaper/)大佬在讨论区的思路讲解,可以先看一下[这位大佬的专栏](https://zhuanlan.zhihu.com/p/112504092)来理解思路
+之前我对树状数组的理解非常肤浅：**就是用来处理范围的**，如果范围变更多，单点查询少，就用差分数组；如果单点变更多和范围查询多，就用树状数组。但本题恰好就用到了树状数组的构建过程，在构建过程中得到答案。
+本题的思路和上述专栏中的POJ 2352.Stars类似，不同之处在于前者在处理一个点时要保证所有可能小于该点的点都被处理，而本题则要保证所有可能大于该点的点都被处理，要做一个逆向，按照从大到小的顺序构建树状数组
+大致思路：
+1. 将形状点\(Rectangle\)和目标点\(Point\)放置于同一个数组中，按照先y后x的顺序将点从小到大排序，需要注意的是，后续添加树状数组时，如果目标点和形状点相同，应该先处理形状点再处理目标点，否则会有遗漏，因此需要注意排序时相同的点的先后顺序
+2. 离散化
+3. 逆序，然后从头开始处理，如果是形状点就添加到树状数组中，如果是目标点就判断当前所有形状的数量和被目标点绝对包住\(目标点不在其边框上\)的数量的差值，同时由于排序打乱了原先Points的顺序，因此需要用容器记录
+4. 根据容器记录的值，返回符合顺序的答案
+
+同时需要注意的是本题最多出现5*10^4个形状点，但范围却达到了10^9，需要做一个离散化，否则会超空间限制
+最后由于形状点和目标点会被混在一起排序以确定处理顺序，所以最多会有10^5个节点，这个就是树状数组的最大长度
+代码如下，较为丑陋，欢迎交流
+*PS:这题难度真的是Middle吗？我咋感觉比某些Hard还难啊*
+```java
+class Solution {
+    class Node{
+        int x,y;
+        boolean isPoint;
+        public Node(int _x,int _y, boolean _isPoint){
+            x=_x;y=_y;isPoint=_isPoint;
+        }
+    }
+    class TreeNums{
+        // attention: pos start from 1
+        int[] treenums;
+        int len;
+        public TreeNums(int _len){
+            len=_len;
+            treenums = new int[len];
+        }
+        void add(int pos){
+            while(pos<len){
+                treenums[pos]++;
+                pos+=(pos&-pos);
+            }
+        }
+        int query(int pos){
+            int res=0;
+            while(pos>0){
+                res+=treenums[pos];
+                pos-=(pos&-pos);
+            }
+            return res;
+        }
+    }
+    public int[] countRectangles(int[][] rectangles, int[][] points) {
+        // 0. init
+        // 双关键字排序
+        Node[] nodes = new Node[rectangles.length + points.length];
+        Integer idx =0;
+        for(int[] rectangle:rectangles){
+            Node node = new Node(rectangle[0], rectangle[1], false);
+            nodes[idx++]=node;
+        }
+        for(int[] point:points){
+            Node node = new Node(point[0], point[1], true);
+            nodes[idx++]=node;
+        }
+        Arrays.sort(nodes, (o1, o2) -> {
+            if(o1.y!=o2.y) return (o1.y<o2.y)?-1:1;
+            else{
+                if(o1.x!= o2.x) return (o1.x<o2.x)?-1:1;
+                // 如果两个点相同，一个是形状一个是目标点，应该先填充形状再判断目标点
+                // 由于之后需要逆序操作，因此目标点要在形状之前
+                else return (o1.isPoint)?-1:1;
+            }
+        });
+        // 由于 10^9会超越空间大小限制，且总数不超过5*10^4，因此可以进行离散化(discretize)操作
+        Integer[] txInt = Arrays.stream(nodes).map(item->item.x).collect(Collectors.toList()).toArray(new Integer[0]);
+        Integer[] tyInt = Arrays.stream(nodes).map(item->item.y).collect(Collectors.toList()).toArray(new Integer[0]);
+        int[] ty = new int[tyInt.length];
+        int[] tx = new int[txInt.length];
+        for(int i=0;i<txInt.length;++i) {
+            tx[i] = txInt[i];
+            ty[i] = tyInt[i];
+        }
+        Map<Integer,Integer> mapX = discretize(tx);
+        Map<Integer,Integer> mapY = discretize(ty);
+        for(Node node:nodes){
+            node.x = mapX.get(node.x);
+            node.y = mapY.get(node.y);
+        }
+        for(int i=0;i<nodes.length/2;++i){
+            Node tmp = nodes[i];
+            nodes[i] = nodes[nodes.length-i-1];
+            nodes[nodes.length-i-1]=tmp;
+        }
+        // 此时Node已全部完成初始化操作，可以开始填充树状数组
+        // 尤其需要注意的是，因为形状可以最多可以有5*10^4个，而Point最多也可以有5*10^4个
+        // 因此Node最多有10^5个，树状数组的最大长度也是这个
+        TreeNums treeNums = new TreeNums(100010);
+        Map<Integer,Map<Integer, Integer>> map = new HashMap<>();
+        // 1. process
+        for(Node node:nodes){
+            if(node.isPoint){
+                int res = treeNums.query(100000) - treeNums.query(node.x-1);
+                Map<Integer,Integer> tmpMap = map.getOrDefault(node.x,new HashMap<>());
+                tmpMap.put(node.y,res);
+                map.put(node.x,tmpMap);
+            }
+            else treeNums.add(node.x);
+        }
+        // 2. return
+        // 因为Points被放入Node中排序了，所以为了按照原来的顺序输出答案，需要再处理
+        int[] res = new int[points.length];
+        idx=0;
+        for(int[] point:points)
+            res[idx++] = map.get(mapX.get(point[0])).get(mapY.get(point[1]));
+        return res;
+    }
+    private Map<Integer,Integer> discretize(int[] _nums){
+        int[] nums = Arrays.copyOf(_nums,_nums.length);
+        Arrays.sort(nums);
+        int idx=1;
+        Map<Integer,Integer> res = new HashMap<>();
+        for(int num:nums)
+            if(!res.containsKey(num))
+                res.put(num,idx++);
+        return res;
+    }
+}
+```
